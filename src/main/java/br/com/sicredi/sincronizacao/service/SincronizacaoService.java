@@ -1,11 +1,12 @@
 package br.com.sicredi.sincronizacao.service;
 
 import br.com.sicredi.sincronizacao.dto.ContaDTO;
+import br.com.sicredi.sincronizacao.handler.CSVHandler;
+import br.com.sicredi.sincronizacao.handler.ValidateLine;
 import br.com.sicredi.sincronizacao.timer.MeasuredExecutionTime;
 import br.com.sicredi.sincronizacao.utils.OutputColor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,14 +17,8 @@ import java.io.IOException;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -37,9 +32,11 @@ public class SincronizacaoService {
   @Value("${synchronization.readWriteError}")
   private String readWriteError;
   @Autowired
-  BancoCentralService bancoCentralService;
+  private BancoCentralService bancoCentralService;
   @Autowired
-  CSVHandler csvHandler;
+  private CSVHandler csvHandler;
+  @Autowired
+  private ThreadPoolExecutor executor;
 
   @MeasuredExecutionTime
   public void syncAccounts(String[] args) throws IOException {
@@ -50,11 +47,7 @@ public class SincronizacaoService {
       try (BufferedReader reader = new BufferedReader(new FileReader(args[0]));
            BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_OUTPUT))) {
 
-        //executor deve existir em um contexto inferior ao BufferedReader e BufferedWriter
-        //garantindo que as thread serão encerradas ainda com o acesso ao disco disponível.
-        ThreadPoolExecutor executor = getThreadPoolExecutor();
         writer.write(csvHandler.getHeaders());
-
         //jump headers
         reader.readLine();
 
@@ -77,6 +70,8 @@ public class SincronizacaoService {
             writer.append(csvHandler.buildLineValidationError(lineArray, validateLine));
           }
         }
+        //executor deve existir em um contexto inferior ao BufferedReader e BufferedWriter
+        //por isso é necessário que ele sempre seja fechado dentro do mesmo contexto.
         executor.shutdown();
       } catch (IOException e) {
         log.error(readWriteError, e);
@@ -91,19 +86,6 @@ public class SincronizacaoService {
 
   private String successMessage(String path) {
     return OutputColor.WHITE_BACKGROUND_BRIGHT+OutputColor.GREEN_BOLD_BRIGHT+path+OutputColor.ANSI_RESET;
-  }
-
-  private ThreadPoolExecutor getThreadPoolExecutor() {
-    int cores = Runtime.getRuntime().availableProcessors();
-
-    ThreadPoolExecutor executor = new ThreadPoolExecutor(
-            cores,
-            cores,
-            0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<>(cores),
-            new ThreadPoolExecutor.CallerRunsPolicy()
-    );
-    return executor;
   }
 
   private File getFile(String file) throws IOException {

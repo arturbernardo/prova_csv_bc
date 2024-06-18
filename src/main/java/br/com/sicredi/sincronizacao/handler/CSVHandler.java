@@ -1,10 +1,11 @@
-package br.com.sicredi.sincronizacao.service;
+package br.com.sicredi.sincronizacao.handler;
 
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -34,6 +35,7 @@ public class CSVHandler {
     private final String NEW_LINE = System.lineSeparator();
 
     public ValidateLine validateInput(String[] line) {
+        if (line.length < 3) return new ValidateLine(false, new ArrayList<>());
         List<String> errors = new ArrayList<>();
         if (StringUtils.isEmpty(line[0])) errors.add(HEADER_AGENCIA);
         if (StringUtils.isEmpty(line[1])) errors.add(HEADER_CONTA);
