@@ -32,33 +32,14 @@ public class SincronizacaoService {
 
   @Value("${synchronization.output_file}")
   private String FILE_OUTPUT;
-  @Value("${synchronization.csv.column_separator}")
-  private String COLUMN_SEPARATOR;
-  @Value("${synchronization.csv.header_agencia}")
-  private String HEADER_AGENCIA;
-  @Value("${synchronization.csv.header_conta}")
-  private String HEADER_CONTA;
-  @Value("${synchronization.csv.header_saldo}")
-  private String HEADER_SALDO;
-  @Value("${synchronization.csv.header_status}")
-  private String HEADER_STATUS;
-  @Value("${synchronization.csv.header_reason}")
-  private String HEADER_REASON;
-  @Value("${synchronization.csv.line.success}")
-  private String SUCCESS;
-  @Value("${synchronization.csv.line.error}")
-  private String ERROR;
-  @Value("${synchronization.csv.line.error.reason.sync}")
-  private String SYNC_REASON ;
-  @Value("${synchronization.csv.line.error.reason.prefix}")
-  private String INPUT_REASON;
   @Value("${synchronization.invalidInputMessage}")
   private String invalidInputMessage;
-  @Value("${synchronization.readWrite}")
-  private String readWrite;
-  private final String NEW_LINE = System.lineSeparator();
+  @Value("${synchronization.readWriteError}")
+  private String readWriteError;
   @Autowired
   BancoCentralService bancoCentralService;
+  @Autowired
+  CSVHandler csvHandler;
 
   @MeasuredExecutionTime
   public void syncAccounts(String[] args) throws IOException {
@@ -72,68 +53,44 @@ public class SincronizacaoService {
         //executor deve existir em um contexto inferior ao BufferedReader e BufferedWriter
         //garantindo que as thread serão encerradas ainda com o acesso ao disco disponível.
         ThreadPoolExecutor executor = getThreadPoolExecutor();
-        writer.write(getHeaders());
+        writer.write(csvHandler.getHeaders());
 
         //jump headers
         reader.readLine();
 
         String line;
         while ((line = reader.readLine()) != null) {
-          String[] lineArray = line.split(COLUMN_SEPARATOR);
-          ValidateLine validateLine = validateInput(lineArray);
+          String[] lineArray = line.split(csvHandler.COLUMN_SEPARATOR);
+          ValidateLine validateLine = csvHandler.validateInput(lineArray);
 
-          if (validateLine.success) {
+          if (validateLine.success()) {
             ContaDTO contaDTO = new ContaDTO(lineArray[0], lineArray[1], Double.parseDouble(lineArray[2]));
             CompletableFuture.runAsync(() -> {
               boolean success = bancoCentralService.atualizaConta(contaDTO);
               try {
-                writer.append(buildLine(lineArray, success));
+                writer.append(csvHandler.buildLine(lineArray, success));
               } catch (IOException e) {
-                log.error(readWrite, e);
+                log.error(readWriteError, e);
               }
             }, executor);
           } else {
-            writer.append(buildLineValidationError(lineArray, validateLine));
+            writer.append(csvHandler.buildLineValidationError(lineArray, validateLine));
           }
         }
         executor.shutdown();
       } catch (IOException e) {
-        log.error(readWrite, e);
+        log.error(readWriteError, e);
       }
       log.info(successMessage(output.getAbsolutePath()));
     }
   }
 
-  private String buildLineValidationError(String[] lineArray, ValidateLine validateLine) {
-    return Stream.of(lineArray[0],
-                    lineArray[1],
-                    lineArray[2],
-                    ERROR,
-                    INPUT_REASON + validateLine.errors.stream().collect(Collectors.joining("|")))
-            .collect(Collectors.joining(COLUMN_SEPARATOR)) + NEW_LINE;
+  private String errorMessage(String message) {
+    return OutputColor.WHITE_BACKGROUND_BRIGHT+OutputColor.ANSI_RED +message+OutputColor.ANSI_RESET;
   }
 
-  private String buildLine(String[] lineArray, boolean success) {
-    return Stream.of(lineArray[0],
-            lineArray[1],
-            lineArray[2],
-            (success ? SUCCESS : ERROR),
-            (success ? "" : SYNC_REASON))
-            .collect(Collectors.joining(COLUMN_SEPARATOR)) + NEW_LINE;
-  }
-
-  private String getHeaders() {
-    return Stream.of(HEADER_AGENCIA, HEADER_CONTA, HEADER_SALDO, HEADER_STATUS, HEADER_REASON)
-            .collect(Collectors.joining(COLUMN_SEPARATOR)) + NEW_LINE;
-  }
-
-  private File getFile(String file) throws IOException {
-    File output = new File(file);
-    if (output.exists()) {
-      output.delete();
-    }
-    output.createNewFile();
-    return output;
+  private String successMessage(String path) {
+    return OutputColor.WHITE_BACKGROUND_BRIGHT+OutputColor.GREEN_BOLD_BRIGHT+path+OutputColor.ANSI_RESET;
   }
 
   private ThreadPoolExecutor getThreadPoolExecutor() {
@@ -149,22 +106,12 @@ public class SincronizacaoService {
     return executor;
   }
 
-  record ValidateLine(Boolean success, List<String> errors){}
-
-  private ValidateLine validateInput(String[] line) {
-    List<String> errors = new ArrayList<>();
-    if (StringUtils.isEmpty(line[0])) errors.add(HEADER_AGENCIA);
-    if (StringUtils.isEmpty(line[1])) errors.add(HEADER_CONTA);
-    if (StringUtils.isEmpty(line[2]) || !line[2].matches("[0-9.]+")) errors.add(HEADER_SALDO);
-
-    return new ValidateLine(errors.size() == 0, errors);
-  }
-
-  private String errorMessage(String message) {
-    return OutputColor.WHITE_BACKGROUND_BRIGHT+OutputColor.ANSI_RED +message+OutputColor.ANSI_RESET;
-  }
-
-  private String successMessage(String path) {
-    return OutputColor.WHITE_BACKGROUND_BRIGHT+OutputColor.GREEN_BOLD_BRIGHT+path+OutputColor.ANSI_RESET;
+  private File getFile(String file) throws IOException {
+    File output = new File(file);
+    if (output.exists()) {
+      output.delete();
+    }
+    output.createNewFile();
+    return output;
   }
 }

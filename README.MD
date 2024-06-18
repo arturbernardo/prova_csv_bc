@@ -12,12 +12,15 @@ lógica que exija do processador, pode-se analisar o aumento do número de threa
 # Solução
 CSV de output contem os dados de entrada, um status indicando caso de sucesso ou falha
 e os motivos da falha.
+O output será o path completo do arquivo, apresentado no console com a escrita na cor verde e um fundo branco.
 
-Em casos de erro de sincronização com o Banco Central, a linha encontrada será como esta:
+<span style="color: green; background-color: white;">Users/user/Teste Tecnico/backend/OUTPUT.csv</span>
+
+Em casos de erro de sincronização de uma conta com o Banco Central, a linha encontrada no output será como esta:
 
 ```457920683,322820590,1071064152,ERROR,SYNC```
 
-Em casos de erro de dados de entrada, a linha encontrada será como as seguintes:
+Em casos de problemas com os dados da conta, a linha encontrada será como uma das seguintes:
 
 ```,48920-7,29.96,ERROR,VALIDATION: agencia```
 
@@ -29,7 +32,7 @@ Em casos de erro de dados de entrada, a linha encontrada será como as seguintes
 
 # Rodar o sistema
 
-* Existe um script que simplifica build e roda o sistema em seguida.
+* Na raiz do projeto há um script que compila e roda o projeto. O path completo do arquivo deve ser fornecido como parâmetro.
 
 ```./compile.sh "/Users/user/Desktop/Teste T‚cnico -alterado/Teste T‚cnico/backend/DATA.csv"```
 
@@ -47,4 +50,7 @@ Máquina utilizada:
 * 2 GHz i7 com 4 cores
 * 16 GB Ram
 * SSD
+
+Consumo de memória e processamento observados com a ferramenta nativa do java, ```VisualVM```.
+Basta rodar o comando ```jvisualvm``` no terminal que uma UI é disponibilizada com os processos java em andamento destacados.
 
