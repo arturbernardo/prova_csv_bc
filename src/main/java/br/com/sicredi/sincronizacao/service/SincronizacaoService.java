@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -17,8 +18,6 @@ import java.io.IOException;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadPoolExecutor;
 
 @Service
 @RequiredArgsConstructor
@@ -35,18 +34,17 @@ public class SincronizacaoService {
   private BancoCentralService bancoCentralService;
   @Autowired
   private CSVHandler csvHandler;
-  @Autowired
-  private ThreadPoolExecutor executor;
 
   @MeasuredExecutionTime
-  public void syncAccounts(String[] args) throws IOException {
+  public void syncAccounts(String[] args) throws IOException, InterruptedException {
     if (args.length == 0) {
       log.warn(errorMessage(invalidInputMessage));
     } else {
       File output = getFile(FILE_OUTPUT);
-      try (BufferedReader reader = new BufferedReader(new FileReader(args[0]));
-           BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_OUTPUT))) {
 
+      try {
+        BufferedReader reader = new BufferedReader(new FileReader(args[0]));
+        BufferedWriter writer = new BufferedWriter(new FileWriter(FILE_OUTPUT));
         writer.write(csvHandler.getHeaders());
         //jump headers
         reader.readLine();
@@ -58,26 +56,26 @@ public class SincronizacaoService {
 
           if (validateLine.success()) {
             ContaDTO contaDTO = new ContaDTO(lineArray[0], lineArray[1], Double.parseDouble(lineArray[2]));
-            CompletableFuture.runAsync(() -> {
-              boolean success = bancoCentralService.atualizaConta(contaDTO);
-              try {
-                writer.append(csvHandler.buildLine(lineArray, success));
-              } catch (IOException e) {
-                log.error(readWriteError, e);
-              }
-            }, executor);
+            callAndWriteAsync(writer, lineArray, contaDTO);
           } else {
             writer.append(csvHandler.buildLineValidationError(lineArray, validateLine));
           }
         }
-        //executor deve existir em um contexto inferior ao BufferedReader e BufferedWriter
-        //por isso é necessário que ele sempre seja fechado dentro do mesmo contexto.
-        executor.shutdown();
       } catch (IOException e) {
         log.error(readWriteError, e);
       }
       log.info(successMessage(output.getAbsolutePath()));
     }
+  }
+
+  @Async
+  private void callAndWriteAsync(BufferedWriter writer, String[] lineArray, ContaDTO contaDTO) throws InterruptedException {
+      boolean success = bancoCentralService.atualizaConta(contaDTO);
+      try {
+        writer.append(csvHandler.buildLine(lineArray, success));
+      } catch (IOException e) {
+        log.error(readWriteError, e);
+      }
   }
 
   private String errorMessage(String message) {
