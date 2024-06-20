@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -35,6 +34,9 @@ public class SincronizacaoService {
   @Autowired
   private CSVHandler csvHandler;
 
+  @Autowired
+  private AsyncBancoCentralCall asyncBancoCentralCall;
+
   @MeasuredExecutionTime
   public void syncAccounts(String[] args) throws IOException, InterruptedException {
     if (args.length == 0) {
@@ -56,7 +58,7 @@ public class SincronizacaoService {
 
           if (validateLine.success()) {
             ContaDTO contaDTO = new ContaDTO(lineArray[0], lineArray[1], Double.parseDouble(lineArray[2]));
-            callAndWriteAsync(writer, lineArray, contaDTO);
+            asyncBancoCentralCall.executeAndWrite(writer, lineArray, contaDTO, bancoCentralService, csvHandler);
           } else {
             writer.append(csvHandler.buildLineValidationError(lineArray, validateLine));
           }
@@ -66,16 +68,6 @@ public class SincronizacaoService {
       }
       log.info(successMessage(output.getAbsolutePath()));
     }
-  }
-
-  @Async
-  private void callAndWriteAsync(BufferedWriter writer, String[] lineArray, ContaDTO contaDTO) throws InterruptedException {
-      boolean success = bancoCentralService.atualizaConta(contaDTO);
-      try {
-        writer.append(csvHandler.buildLine(lineArray, success));
-      } catch (IOException e) {
-        log.error(readWriteError, e);
-      }
   }
 
   private String errorMessage(String message) {
